@@ -9,7 +9,7 @@ import utils
 
 from torch import nn
 
-import deeplabv3
+import models
 
 def train_one_epoch(model, criterion, optimizer, data_loader, lr_scheduler, device, epoch, print_freq):
     model.train()
@@ -68,10 +68,10 @@ def main_loop():
     weight_decay = 1e-4
     print_freq = 10
     aux_loss = False
-    device = 'cuda'
-    last_ckpt_dir = 'last_ckpt'
-    resume = False
     test_only = False
+    resume = False
+    start_epoch = 0
+    device = 'cuda'
 
     dataset = torchvision.datasets.VOCSegmentation(data_path, image_set="train", \
         transforms=get_transform(True), download = data_download)
@@ -94,23 +94,25 @@ def main_loop():
         dataset_test, batch_size=1, sampler=test_sampler, num_workers=16, collate_fn=utils.collate_fn
     )
 
-    model = deeplabv3.__dict__[model_name](
+    model = models.__dict__[model_name](
+        in_channels = 3,
         num_classes=num_classes,
         aux_loss=aux_loss,
         )
         
     model.to(device)
 
-    params_to_optimize = [
-        {"params": [p for p in model.backbone.parameters() if p.requires_grad]},
-        {"params": [p for p in model.classifier.parameters() if p.requires_grad]},
-    ]
-    
     if aux_loss:
+        params_to_optimize = [
+            {"params": [p for p in model.backbone.parameters() if p.requires_grad]},
+            {"params": [p for p in model.classifier.parameters() if p.requires_grad]},
+        ]
         params = [p for p in model.aux_classifier.parameters() if p.requires_grad]
         params_to_optimize.append({"params": params, "lr": lr * 10})
-        
-    optimizer = torch.optim.SGD(params_to_optimize, lr=lr, momentum=momentum, weight_decay=weight_decay)
+        optimizer = torch.optim.SGD(params_to_optimize, lr=lr, momentum=momentum, weight_decay=weight_decay)
+
+    else:
+        optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=momentum, weight_decay=weight_decay)
 
     iters_per_epoch = len(data_loader)
 
@@ -152,12 +154,16 @@ def main_loop():
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     print(f"Training time {total_time_str}")
 
-data_path = '../VOCtrainval_11_May_2012' # E:\Work\VOC2012\VOCtrainval_11-May-2012'
-model_name = "deeplabv3_resnet50"
-output_dir = 'output' # "/content/output"
+data_path = '/content/drive/MyDrive/2022_SMWU_Deep_Learning/segmentation' # 'VOC2012'
+model_name = "UNET" # "deeplabv3_resnet50"
+output_dir = 'output' # "/content/output" #
+last_ckpt_dir = "/content/drive/MyDrive/2022_SMWU_Deep_Learning/segmentation/output_" + model_name #'last_ckpt'
 batch_size = 8
-epochs =30
+epochs = 30
 lr =0.01 
-data_download = False
+if os.path.exists(data_path):
+    data_download = False
+else:
+    data_download = True
 
 main_loop()

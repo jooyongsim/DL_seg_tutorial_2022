@@ -5,15 +5,83 @@ import torch
 from torch import nn, Tensor
 from torch.nn import functional as F
 import torchvision
+import torchvision.transforms.functional as TF
 
 from utils import IntermediateLayerGetter
 
 __all__ = [
+    "UNET",
     "DeepLabV3",
     "deeplabv3_resnet50",
     "deeplabv3_resnet101",
     "deeplabv3_mobilenet_v3_large",
 ]
+
+class DConv(nn.Module):
+  def __init__(self, in_channel, out_channel):
+    super().__init__()
+    self.conv = nn.Sequential(
+        nn.Conv2d(in_channel, out_channel,3,1,1),
+        nn.BatchNorm2d(out_channel),
+        nn.ReLU(),
+        nn.Conv2d(out_channel, out_channel,3,1,1),
+        nn.BatchNorm2d(out_channel),
+        nn.ReLU(),
+    )
+  def forward(self, x):
+    return self.conv(x)
+
+class UNET(nn.Module):
+  """Constructs a DeepLabV3 model with a ResNet-101 backbone.
+
+  Args:
+      in_channel (int) : The number of channels of input images
+      out_channel (int): The number of classes
+      aux_loss (bool, optional): False, we do not use auxia auxiliary classifier
+      features (list): The number of featueres in down paths
+  """
+  def __init__(self, in_channel = 3, out_channel = 21, aux_loss = False, features=[64,128,256,512]):
+    super().__init__()
+    self.downs = nn.ModuleList()
+    for feature in features:
+      self.downs.append(DConv(in_channel, feature))
+      in_channel = feature
+    self.pool = nn.MaxPool2d(2,2)
+    self.bottleneck = DConv(features[-1], features[-1]*2)
+    self.ups = nn.ModuleList()
+    features = features[::-1]
+    for feature in features:
+      self.ups.append(
+          nn.ModuleList([
+                         nn.ConvTranspose2d(feature*2,feature,2,2),
+                         DConv(feature*2, feature),
+          ])
+      )
+    self.head = nn.Conv2d(features[-1],out_channel,kernel_size=1)
+
+  def forward(self,x):
+    # down path
+    skips = []
+    for down in self.downs:
+      x = down(x)
+      skips.append(x)
+      x = self.pool(x)
+    x = self.bottleneck(x)
+    skips = skips[::-1]
+
+    # up path
+    for ind, up in enumerate(self.ups):
+      x = up[0](x)
+      if x.shape != skips[ind].shape:
+          x = TF.resize(x, size=skips[ind].shape[2:])
+      x = torch.cat((skips[ind],x),dim=1)
+      x = up[1](x)
+    x = self.head(x)
+    
+    result = OrderedDict()
+    result["out"] = x
+    
+    return result
 
 class FCNHead(nn.Sequential):
     def __init__(self, in_channels: int, channels: int) -> None:
@@ -179,6 +247,7 @@ def _deeplabv3_mobilenetv3(
 
 
 def deeplabv3_resnet50(
+    in_channels: int = 3,
     num_classes: int = 21,
     aux_loss: Optional[bool] = None,
     pretrained_backbone: bool = True,
@@ -186,6 +255,7 @@ def deeplabv3_resnet50(
     """Constructs a DeepLabV3 model with a ResNet-50 backbone.
 
     Args:
+        in_channel (int) : The number of channels of input images
         num_classes (int): number of output classes of the model (including the background)
         aux_loss (bool, optional): If True, it uses an auxiliary loss
         pretrained_backbone (bool): If True, the backbone will be pre-trained.
@@ -198,6 +268,7 @@ def deeplabv3_resnet50(
 
 
 def deeplabv3_resnet101(
+    in_channels: int = 3,
     num_classes: int = 21,
     aux_loss: Optional[bool] = None,
     pretrained_backbone: bool = True,
@@ -205,6 +276,7 @@ def deeplabv3_resnet101(
     """Constructs a DeepLabV3 model with a ResNet-101 backbone.
 
     Args:
+        in_channel (int) : The number of channels of input images
         num_classes (int): The number of classes
         aux_loss (bool, optional): If True, include an auxiliary classifier
         pretrained_backbone (bool): If True, the backbone will be pre-trained.
@@ -216,6 +288,7 @@ def deeplabv3_resnet101(
 
 
 def deeplabv3_mobilenet_v3_large(
+    in_channels: int = 3,
     num_classes: int = 21,
     aux_loss: Optional[bool] = None,
     pretrained_backbone: bool = True,
@@ -223,6 +296,7 @@ def deeplabv3_mobilenet_v3_large(
     """Constructs a DeepLabV3 model with a MobileNetV3-Large backbone.
 
     Args:
+        in_channel (int) : The number of channels of input images
         num_classes (int): number of output classes of the model (including the background)
         aux_loss (bool, optional): If True, it uses an auxiliary loss
         pretrained_backbone (bool): If True, the backbone will be pre-trained.

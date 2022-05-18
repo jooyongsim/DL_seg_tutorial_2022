@@ -45,7 +45,7 @@ class UNET(nn.Module):
     self.downs = nn.ModuleList()
     for feature in features:
       self.downs.append(DConv(in_channels, feature))
-      in_channel = feature
+      in_channels = feature
     self.pool = nn.MaxPool2d(2,2)
     self.bottleneck = DConv(features[-1], features[-1]*2)
     self.ups = nn.ModuleList()

@@ -35,16 +35,16 @@ class UNET(nn.Module):
   """Constructs a DeepLabV3 model with a ResNet-101 backbone.
 
   Args:
-      in_channel (int) : The number of channels of input images
-      out_channel (int): The number of classes
+      in_channels (int) : The number of channels of input images
+      num_classes (int): The number of classes
       aux_loss (bool, optional): False, we do not use auxia auxiliary classifier
       features (list): The number of featueres in down paths
   """
-  def __init__(self, in_channel = 3, out_channel = 21, aux_loss = False, features=[64,128,256,512]):
+  def __init__(self, in_channels = 3, num_classes = 21, aux_loss = False, features=[64,128,256,512]):
     super().__init__()
     self.downs = nn.ModuleList()
     for feature in features:
-      self.downs.append(DConv(in_channel, feature))
+      self.downs.append(DConv(in_channels, feature))
       in_channel = feature
     self.pool = nn.MaxPool2d(2,2)
     self.bottleneck = DConv(features[-1], features[-1]*2)
@@ -57,7 +57,7 @@ class UNET(nn.Module):
                          DConv(feature*2, feature),
           ])
       )
-    self.head = nn.Conv2d(features[-1],out_channel,kernel_size=1)
+    self.head = nn.Conv2d(features[-1], num_classes, kernel_size=1)
 
   def forward(self,x):
     # down path

@@ -11,7 +11,59 @@ from collections import OrderedDict
 from typing import Dict, Optional
 
 import transforms as T
+import torch.nn.functional as F
 
+
+class DiceLoss(nn.Module):
+    def __init__(self, weight=None, size_average=True):
+        super(DiceLoss, self).__init__()
+
+    def forward(self, inputs, targets, smooth=1):
+        
+        #comment out if your model contains a sigmoid or equivalent activation layer
+        inputs = F.softmax(inputs, dim=1)
+
+        targets_tmp = targets.clone()
+        targets_tmp[targets==255] = 21
+        targets = targets_tmp
+        targets = F.one_hot(targets, num_classes = 22)
+        targets = targets[:,:,:,:21].clone().permute((0,3,1,2))
+
+        #flatten label and prediction tensors
+        inputs = inputs.reshape(-1)
+        targets = targets.reshape(-1)
+
+        intersection = (inputs * targets).sum()                            
+
+        dice = (2.*intersection + smooth)/(inputs.sum() + targets.sum() + smooth)  
+        
+        return 1 - dice 
+
+class IoULoss(nn.Module):
+    def __init__(self, weight=None, size_average=True):
+        super(IoULoss, self).__init__()
+
+    def forward(self, inputs, targets, smooth=1):
+        
+        #comment out if your model contains a sigmoid or equivalent activation layer
+        inputs = F.softmax(inputs, dim=1)
+
+        targets_tmp = targets.clone()
+        targets_tmp[targets==255] = 21
+        targets = targets_tmp
+        targets = F.one_hot(targets, num_classes = 22)
+        targets = targets[:,:,:,:21].clone().permute((0,3,1,2))
+        
+        #intersection is equivalent to True Positive count
+        #union is the mutually inclusive area of all labels & predictions 
+        intersection = (inputs * targets).sum()
+        total = (inputs + targets).sum()
+        union = total - intersection 
+        
+        IoU = (intersection + smooth)/(union + smooth)
+                
+        return 1 - IoU
+    
 class SegmentationPresetTrain:
     def __init__(self, base_size, crop_size, hflip_prob=0.5, mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)):
         min_size = int(0.5 * base_size)

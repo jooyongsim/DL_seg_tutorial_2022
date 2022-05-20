@@ -67,24 +67,6 @@ def evaluate(model, data_loader, device, num_classes, test_only = False):
                     else:
                         writer.writerow([f"id_{i}", 1])             
     return confmat
-            
-def save_csv(pred_loader, data_loader, device, num_classes):
-    confmat = utils.ConfusionMatrix(num_classes)
-    with torch.inference_mode():
-        for pred, target in zip(pred_loader, data_loader):
-            output, target = pred.to(device), target.to(device)
-            confmat.update(target.flatten(), output.argmax(1).flatten())
-
-        confmat.reduce_from_all_processes()
-        _, _, ius = confmat.compute()
-    
-    with open('result.csv', 'w', newline='') as csvfile:
-        writer = csv.writer(csvfile, delimiter=',')
-        writer.writerow(["Class", "IoU"])
-        for cnt, iu in enumerate(ius.item() * 100):
-            writer.writerow([f"class_{cnt}", iu.item()])
-            
-    return iu.mean().item() * 100
 
 def criterion(inputs, target):
     losses = {}
